@@ -30,6 +30,14 @@ dependencies {
 
     // JSON handling
     implementation("org.json:json:20240303")
+
+    // Testing
+    testImplementation(kotlin("test"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 compose.desktop {
