@@ -1,0 +1,121 @@
+name: Build & Release Windows
+
+# main에 VERSION 파일의 새 버전이 올라오면 일반용·천주교인용 설치 파일(.msi)을 만들어 릴리스한다.
+# (안드로이드 저장소와 같은 방식: 태그 v<버전> = 일반용, v<버전>-catholic = 천주교인용)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Set version
+        run: |
+          BASE="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF" == "refs/heads/main" ]] \
+             && ! gh release view "v${BASE}" >/dev/null 2>&1; then
+            echo "VERSION_NAME=${BASE}" >> "$GITHUB_ENV"
+            echo "RELEASE=true" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_NAME=${BASE}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Test (일반용 · 천주교인용) + 화면 미리보기
+        run: |
+          ./gradlew.bat --no-daemon test -Pedition=general "-Pscreens=$PWD/screens/general" --console=plain
+          ./gradlew.bat --no-daemon test -Pedition=catholic "-Pscreens=$PWD/screens/catholic" --console=plain
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens-${{ env.VERSION_NAME }}
+          path: screens/
+
+      - name: Build installers (일반용 + 천주교인용)
+        run: |
+          mkdir -p dist
+          ./gradlew.bat --no-daemon packageMsi -Pedition=general --console=plain
+          cp build/compose/binaries/main/msi/DailyHabit-*.msi "dist/DailyHabit-${VERSION_NAME}.msi"
+          ./gradlew.bat --no-daemon packageMsi -Pedition=catholic --console=plain
+          cp build/compose/binaries/main/msi/DailyHabit-Catholic-*.msi "dist/DailyHabit-Catholic-${VERSION_NAME}.msi"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DailyHabit-${{ env.VERSION_NAME }}
+          path: dist/*.msi
+
+      - name: Release 일반용
+        if: env.RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          target_commitish: ${{ github.sha }}
+          name: DailyHabit for Windows v${{ env.VERSION_NAME }}
+          files: dist/DailyHabit-${{ env.VERSION_NAME }}.msi
+          make_latest: "true"
+          body: |
+            ## DailyHabit for Windows v${{ env.VERSION_NAME }} (일반용)
+            안드로이드 DailyHabit v${{ env.VERSION_NAME }}과 같은 기능·디자인·아이콘입니다.
+            - 오늘의 명언 (한국어 · 영어)
+            - 앞으로 7일 구글 캘린더 일정 (설정에서 캘린더의 비공개 iCal 주소 연결)
+            - 할 일 · 매일 루틴(알림 · 체크 · 통계) · 맛집 리스트
+            - 한 줄 일기 · 독서 기록(밑줄·메모) · 독서 목표
+            - 맛집 방문 기록(날짜 수정·사진) · 방문 달력 · 동네별 지도 보기
+            - 월간 돌아보기 · 감사 일기 모음
+            - 일기·맛집 엑셀 저장, 백업 파일 저장·복원 (휴대폰 앱 백업과 호환)
+            - 원하는 시각의 아침 알림 (윈도우 알림 · 오늘 일정 · 루틴)
+            - 앱 정보에서 업데이트 확인 · 내려받아 바로 설치, 새 버전 알림
+            - 창을 닫아도 트레이에서 알림, Windows 시작 시 자동 실행
+
+            **설치:** `DailyHabit-${{ env.VERSION_NAME }}.msi`를 내려받아 실행하세요. 새 버전은 기존 설치본 위에 덮어 설치되고 기록은 그대로 남습니다.
+            천주교 기능(오늘의 복음 · 기도)이 필요하면 **DailyHabit 천주교인용** 릴리스를 받으세요.
+            처음 실행할 때 ‘Windows의 PC 보호’ 창이 뜨면 ‘추가 정보 → 실행’을 누르세요.
+
+      - name: Release 천주교인용
+        if: env.RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}-catholic
+          target_commitish: ${{ github.sha }}
+          name: DailyHabit 천주교인용 for Windows v${{ env.VERSION_NAME }}
+          files: dist/DailyHabit-Catholic-${{ env.VERSION_NAME }}.msi
+          make_latest: "false"
+          body: |
+            ## DailyHabit 천주교인용 for Windows v${{ env.VERSION_NAME }}
+            안드로이드 DailyHabit 천주교인용 v${{ env.VERSION_NAME }}과 같은 기능·디자인·아이콘입니다.
+            - 오늘의 복음 (매일미사) · 주요 기도문 (가톨릭 기도서) · 오늘의 묵주기도 신비
+            - 앞으로 7일 구글 캘린더 일정 (설정에서 캘린더의 비공개 iCal 주소 연결)
+            - 할 일 · 매일 루틴(알림 · 체크 · 통계) · 맛집 리스트
+            - 오늘의 말씀 읽기·기도하기 루틴 자동 체크
+            - 한 줄 일기 · 독서 기록(밑줄·메모) · 독서 목표
+            - 맛집 방문 기록(날짜 수정·사진) · 방문 달력 · 동네별 지도 보기
+            - 월간 돌아보기 · 감사 일기 모음
+            - 일기·맛집 엑셀 저장, 백업 파일 저장·복원 (휴대폰 앱 백업과 호환)
+            - 원하는 시각의 아침 알림 (윈도우 알림 · 복음 요약 · 오늘 일정)
+            - 앱 정보에서 업데이트 확인 · 내려받아 바로 설치, 새 버전 알림
+            - 창을 닫아도 트레이에서 알림, Windows 시작 시 자동 실행
+
+            **설치:** `DailyHabit-Catholic-${{ env.VERSION_NAME }}.msi`를 내려받아 실행하세요.
+            v1.0.0을 쓰고 있었다면 이 버전이 그 위에 덮어 설치되고 기록이 그대로 이어집니다.
+            처음 실행할 때 ‘Windows의 PC 보호’ 창이 뜨면 ‘추가 정보 → 실행’을 누르세요.

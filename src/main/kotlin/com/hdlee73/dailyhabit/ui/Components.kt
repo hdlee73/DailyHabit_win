@@ -1,5 +1,7 @@
 package com.hdlee73.dailyhabit.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,102 +60,170 @@ fun SoftCard(
     }
 }
 
-/** 섹션 제목 */
+/** 작은 대문자 느낌의 섹션 라벨 */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+fun SectionLabel(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        color = MaterialTheme.colorScheme.onSurface,
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        color = color,
         modifier = modifier,
     )
 }
 
-/** 작은 캡션/보조 문구 */
 @Composable
-fun SubText(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier,
-    )
-}
-
-/** 비어 있는 상태 표시 */
-@Composable
-fun EmptyState(emoji: String, title: String, description: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 36.dp, horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(emoji, fontSize = 42.sp)
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Text(
-            description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
+fun ProgressRing(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp,
+    stroke: Dp = 7.dp,
+    color: Color = MaterialTheme.colorScheme.primary,
+    track: Color = MaterialTheme.colorScheme.surfaceVariant,
+    content: @Composable () -> Unit = {},
+) {
+    val animated by animateFloatAsState(progress.coerceIn(0f, 1f), tween(600), label = "ring")
+    Box(modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size)) {
+            val s = Stroke(stroke.toPx(), cap = StrokeCap.Round)
+            val inset = stroke.toPx() / 2
+            val arcSize = androidx.compose.ui.geometry.Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(track, 0f, 360f, false, topLeft, arcSize, style = s)
+            if (animated > 0f) drawArc(color, -90f, 360f * animated, false, topLeft, arcSize, style = s)
+        }
+        content()
     }
 }
 
-/** 둥근 체크 버튼 */
+/** 원형 체크 버튼 */
 @Composable
-fun CircleCheck(
+fun CheckCircle(
     checked: Boolean,
-    onToggle: () -> Unit,
+    color: Color,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    size: Dp = 26.dp,
+    size: Dp = 28.dp,
+    onClick: () -> Unit,
 ) {
     Box(
-        modifier = modifier
+        modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (checked) color else Color.Transparent)
-            .border(2.dp, if (checked) color else MaterialTheme.colorScheme.outline, CircleShape)
-            .clickable(onClick = onToggle),
+            .then(
+                if (checked) Modifier.background(color)
+                else Modifier.border(2.dp, color.copy(alpha = 0.7f), CircleShape)
+            )
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (checked) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(size * 0.65f),
-            )
+        if (checked) Icon(Icons.Filled.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(size * 0.62f))
+    }
+}
+
+/** 작은 알약 모양 태그 */
+@Composable
+fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
+/** 숫자 + 설명 */
+@Composable
+fun StatBlock(value: String, label: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, color = color)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun EmojiBadge(emoji: String, color: Color, size: Dp = 44.dp) {
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center,
+    ) { Text(emoji, fontSize = (size.value * 0.48f).sp) }
+}
+
+@Composable
+fun EmptyState(emoji: String, title: String, body: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(emoji, fontSize = 40.sp)
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+@Composable
+fun SegmentedTabs(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(4.dp),
+    ) {
+        options.forEachIndexed { i, label ->
+            val active = i == selected
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (active) MaterialTheme.colorScheme.surfaceContainerLowest else Color.Transparent)
+                    .clickable { onSelect(i) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
-/** 미니 원형 진행률 */
+/** 오늘 일정·할 일·루틴 요약 (회색 말풍선 느낌) */
 @Composable
-fun MiniProgressRing(
-    progress: Float,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    strokeWidth: Dp = 4.dp,
+fun TodaySummaryRow(
+    eventCount: Int?,
+    todoCount: Int,
+    routineDone: Int,
+    routineTotal: Int,
+    onNavigate: (Section) -> Unit,
 ) {
-    Canvas(modifier = modifier) {
-        val stroke = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
-        drawArc(
-            color = trackColor,
-            startAngle = 0f,
-            sweepAngle = 360f,
-            useCenter = false,
-            style = stroke,
-        )
-        drawArc(
-            color = color,
-            startAngle = -90f,
-            sweepAngle = 360f * progress.coerceIn(0f, 1f),
-            useCenter = false,
-            style = stroke,
-        )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SummaryBubble("일정", eventCount?.let { "${it}개" } ?: "-", Modifier.weight(1f)) { onNavigate(Section.SCHEDULE) }
+        SummaryBubble("할 일", "${todoCount}개", Modifier.weight(1f)) { onNavigate(Section.TODO) }
+        SummaryBubble("루틴", if (routineTotal == 0) "-" else "$routineDone/$routineTotal", Modifier.weight(1f)) {
+            onNavigate(Section.ROUTINE)
+        }
+    }
+}
+
+@Composable
+private fun SummaryBubble(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
     }
 }

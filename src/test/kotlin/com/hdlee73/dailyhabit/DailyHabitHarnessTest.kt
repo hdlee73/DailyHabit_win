@@ -94,12 +94,9 @@ class DailyHabitHarnessTest {
         assertTrue(json.contains("DailyHabit"))
         assertTrue(json.contains("백업 테스트 할일"))
 
-        val summary = Backup.inspect(json).getOrNull()
-        assertNotNull(summary)
+        val summary = Backup.restore(json)
         assertTrue(summary.counts.any { it.first == "할 일" && it.second > 0 })
-
-        val restoreResult = Backup.restore(json)
-        assertTrue(restoreResult.isSuccess)
+        assertTrue(db.todoDao.all().any { it.title == "백업 테스트 할일" })
     }
 
     @Test
@@ -132,5 +129,55 @@ class DailyHabitHarnessTest {
         assertTrue(Updater.isNewer("2.0.0", "1.9.9"))
         assertFalse(Updater.isNewer("1.0.0", "1.0.0"))
         assertFalse(Updater.isNewer("1.0.0", "1.1.0"))
+    }
+
+    @Test
+    fun testNullableColumnsRoundTrip() = runTest {
+        // SQLite가 작은 정수를 Integer로 돌려줘도 마감일·시각이 사라지지 않아야 한다
+        val db = AppDatabase.get()
+        val day = LocalDate.now().toEpochDay()
+        val id = db.todoDao.insert(Todo(title = "마감 있는 할 일", dueEpochDay = day, dueMinute = 600, remind = true))
+        val t = db.todoDao.byId(id)
+        assertNotNull(t)
+        assertEquals(day, t.dueEpochDay)
+        assertEquals(600, t.dueMinute)
+        assertTrue(db.todoDao.withReminders().any { it.id == id })
+    }
+
+    @Test
+    fun testIcsParsing() {
+        val ics = """
+            BEGIN:VCALENDAR
+            X-WR-CALNAME:내 캘린더
+            BEGIN:VEVENT
+            UID:a1
+            DTSTART:20261014T010000Z
+            DTEND:20261014T020000Z
+            SUMMARY:회의
+            END:VEVENT
+            BEGIN:VEVENT
+            UID:a2
+            DTSTART;VALUE=DATE:20261015
+            DTEND;VALUE=DATE:20261016
+            SUMMARY:생일
+            END:VEVENT
+            BEGIN:VEVENT
+            UID:a3
+            DTSTART;TZID=Asia/Seoul:20261005T190000
+            DTEND;TZID=Asia/Seoul:20261005T200000
+            RRULE:FREQ=WEEKLY;BYDAY=MO
+            SUMMARY:운동
+            END:VEVENT
+            END:VCALENDAR
+        """.trimIndent()
+        val from = LocalDate.of(2026, 10, 13)
+        val events = com.hdlee73.dailyhabit.data.Ics.parse(ics, 0, from, from.plusDays(7))
+        assertTrue(events.any { it.title == "회의" })
+        val birthday = events.first { it.title == "생일" }
+        assertTrue(birthday.allDay)
+        assertEquals(LocalDate.of(2026, 10, 15), birthday.end.toLocalDate())
+        val workouts = events.filter { it.title == "운동" }
+        assertEquals(listOf(LocalDate.of(2026, 10, 19)), workouts.map { it.start.toLocalDate() })
+        assertEquals("내 캘린더", events.first().calendarName)
     }
 }
