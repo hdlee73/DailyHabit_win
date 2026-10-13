@@ -8,7 +8,12 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.ResultSet
 import java.time.DayOfWeek
+
+/** SQLite는 작은 정수를 Integer로 돌려주므로 Number로 받아 변환한다 */
+private fun ResultSet.longOrNull(col: String): Long? = (getObject(col) as? Number)?.toLong()
+private fun ResultSet.intOrNull(col: String): Int? = (getObject(col) as? Number)?.toInt()
 
 // ───────────── 할 일 ─────────────
 
@@ -42,6 +47,9 @@ interface TodoDao {
     suspend fun clearDone()
     suspend fun clear()
     suspend fun insertAll(list: List<Todo>)
+    suspend fun byId(id: Long): Todo? = all().firstOrNull { it.id == id }
+    suspend fun withReminders(): List<Todo> =
+        all().filter { !it.done && it.remind && it.dueEpochDay != null && it.dueMinute != null }
 }
 
 // ───────────── 매일 루틴 ─────────────
@@ -89,6 +97,8 @@ interface RoutineDao {
     suspend fun clearAllChecks()
     suspend fun insertRoutines(list: List<Routine>)
     suspend fun insertChecks(list: List<RoutineCheck>)
+    suspend fun byId(id: Long): Routine? = allRoutines().firstOrNull { it.id == id }
+    suspend fun checksOn(epochDay: Long): List<RoutineCheck> = allChecks().filter { it.epochDay == epochDay }
 }
 
 // ───────────── 맛집 ─────────────
@@ -126,6 +136,7 @@ interface RestaurantDao {
     suspend fun delete(r: Restaurant)
     suspend fun clear()
     suspend fun insertAll(list: List<Restaurant>)
+    suspend fun byId(id: Long): Restaurant? = all().firstOrNull { it.id == id }
 }
 
 data class RestaurantVisit(
@@ -145,6 +156,7 @@ interface VisitDao {
     suspend fun delete(id: Long)
     suspend fun clear()
     suspend fun insertAll(list: List<RestaurantVisit>)
+    suspend fun deleteOf(restaurantId: Long) = of(restaurantId).forEach { delete(it.id) }
 }
 
 // ───────────── 한 줄 일기 ─────────────
@@ -249,7 +261,10 @@ class AppDatabase private constructor(private val dbFile: File) {
 
     private val changeTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 64)
 
-    private fun connect(): Connection = DriverManager.getConnection("jdbc:sqlite:${dbFile.absolutePath}")
+    private fun connect(): Connection = DriverManager.getConnection(
+        "jdbc:sqlite:${dbFile.absolutePath}",
+        java.util.Properties().apply { setProperty("busy_timeout", "5000") },
+    )
 
     init {
         initSchema()
@@ -395,14 +410,14 @@ class AppDatabase private constructor(private val dbFile: File) {
                             id = rs.getLong("id"),
                             title = rs.getString("title"),
                             done = rs.getInt("done") == 1,
-                            dueEpochDay = rs.getObject("dueEpochDay") as? Long,
+                            dueEpochDay = rs.longOrNull("dueEpochDay"),
                             createdAt = rs.getLong("createdAt"),
                             priority = rs.getInt("priority"),
                             category = rs.getString("category"),
                             memo = rs.getString("memo"),
-                            dueMinute = rs.getObject("dueMinute") as? Int,
+                            dueMinute = rs.intOrNull("dueMinute"),
                             remind = rs.getInt("remind") == 1,
-                            completedAt = rs.getObject("completedAt") as? Long,
+                            completedAt = rs.longOrNull("completedAt"),
                         )
                     )
                 }
@@ -733,7 +748,7 @@ class AppDatabase private constructor(private val dbFile: File) {
                             wish = rs.getInt("wish") == 1,
                             revisit = rs.getInt("revisit") == 1,
                             visitCount = rs.getInt("visitCount"),
-                            lastVisitEpochDay = rs.getObject("lastVisitEpochDay") as? Long,
+                            lastVisitEpochDay = rs.longOrNull("lastVisitEpochDay"),
                             createdAt = rs.getLong("createdAt"),
                         )
                     )
@@ -1023,7 +1038,7 @@ class AppDatabase private constructor(private val dbFile: File) {
                             category = rs.getString("category"),
                             checked = rs.getInt("checked") == 1,
                             createdAt = rs.getLong("createdAt"),
-                            checkedAt = rs.getObject("checkedAt") as? Long,
+                            checkedAt = rs.longOrNull("checkedAt"),
                         )
                     )
                 }
@@ -1142,8 +1157,8 @@ class AppDatabase private constructor(private val dbFile: File) {
                             currentPage = rs.getInt("currentPage"),
                             status = rs.getInt("status"),
                             rating = rs.getInt("rating"),
-                            startEpochDay = rs.getObject("startEpochDay") as? Long,
-                            endEpochDay = rs.getObject("endEpochDay") as? Long,
+                            startEpochDay = rs.longOrNull("startEpochDay"),
+                            endEpochDay = rs.longOrNull("endEpochDay"),
                             review = rs.getString("review"),
                             createdAt = rs.getLong("createdAt"),
                         )
@@ -1315,9 +1330,7 @@ class AppDatabase private constructor(private val dbFile: File) {
 
         fun get(): AppDatabase = instance ?: synchronized(this) {
             instance ?: run {
-                val appData = System.getenv("APPDATA") ?: System.getProperty("user.home")
-                val dir = File(appData, "DailyHabit").apply { mkdirs() }
-                val file = File(dir, "dailyhabit.db")
+                val file = File(AppDirs.root, "dailyhabit.db")
                 AppDatabase(file).also { instance = it }
             }
         }

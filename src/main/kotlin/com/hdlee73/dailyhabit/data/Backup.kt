@@ -1,9 +1,10 @@
 package com.hdlee73.dailyhabit.data
 
+import com.hdlee73.dailyhabit.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 모든 기록을 JSON 파일 하나로 내보내고 되돌린다 (Android 백업 파일과 100% 호환) */
+/** 모든 기록을 JSON 파일 하나로 내보내고 되돌린다 (천주교인용 ↔ 일반용 사이에서도 호환) */
 object Backup {
     private const val FORMAT = 1
 
@@ -24,7 +25,7 @@ object Backup {
         val root = JSONObject()
         root.put("app", "DailyHabit")
         root.put("format", FORMAT)
-        root.put("appVersion", "1.0.0-win")
+        root.put("appVersion", BuildConfig.VERSION_NAME)
         root.put("exportedAt", System.currentTimeMillis())
         val year = java.time.LocalDate.now().year
         root.put(
@@ -54,13 +55,12 @@ object Backup {
                 .put("createdAt", it.createdAt)
         })
         root.put("restaurantVisits", db.visitDao.all().toJson {
-            JSONObject().put("id", it.id).put("restaurantId", it.restaurantId).put("epochDay", it.epochDay)
-                .put("note", it.note).put("photo", it.photo)
+            JSONObject().put("id", it.id).put("restaurantId", it.restaurantId).put("epochDay", it.epochDay).put("note", it.note).put("photo", it.photo)
         })
-        root.put("diaryEntries", db.diaryDao.all().toJson {
+        root.put("diary", db.diaryDao.all().toJson {
             JSONObject().put("epochDay", it.epochDay).put("text", it.text).put("mood", it.mood).put("updatedAt", it.updatedAt)
         })
-        root.put("shoppingItems", db.shoppingDao.all().toJson {
+        root.put("shopping", db.shoppingDao.all().toJson {
             JSONObject().put("id", it.id).put("name", it.name).put("qty", it.qty).put("category", it.category)
                 .put("checked", it.checked).put("createdAt", it.createdAt).put("checkedAt", it.checkedAt)
         })
@@ -71,182 +71,104 @@ object Backup {
                 .put("createdAt", it.createdAt)
         })
         root.put("bookNotes", db.bookDao.allNotes().toJson {
-            JSONObject().put("id", it.id).put("bookId", it.bookId).put("text", it.text).put("page", it.page).put("createdAt", it.createdAt)
+            JSONObject().put("id", it.id).put("bookId", it.bookId).put("text", it.text).put("page", it.page)
+                .put("createdAt", it.createdAt)
         })
+        settings.lastBackup = System.currentTimeMillis()
         return root.toString(2)
     }
 
-    suspend fun inspect(raw: String): Result<Summary> = runCatching {
-        val root = JSONObject(raw)
-        Summary(
-            listOf(
-                "할 일" to (root.optJSONArray("todos")?.length() ?: 0),
-                "루틴" to (root.optJSONArray("routines")?.length() ?: 0),
-                "맛집" to (root.optJSONArray("restaurants")?.length() ?: 0),
-                "방문 기록" to (root.optJSONArray("restaurantVisits")?.length() ?: 0),
-                "일기" to (root.optJSONArray("diaryEntries")?.length() ?: 0),
-                "장보기" to (root.optJSONArray("shoppingItems")?.length() ?: 0),
-                "책" to (root.optJSONArray("books")?.length() ?: 0),
-            )
-        )
-    }
-
-    suspend fun restore(raw: String): Result<Unit> = runCatching {
-        val root = JSONObject(raw)
-        val db = AppDatabase.get()
+    /** 파일을 먼저 끝까지 읽어 보고, 문제가 없을 때만 기존 기록을 바꾼다. 형식이 틀리면 예외 */
+    suspend fun restore(json: String): Summary {
+        val root = JSONObject(json)
+        require(root.optString("app") == "DailyHabit") { "DailyHabit 백업 파일이 아니에요" }
+        require(root.optInt("format", 0) in 1..FORMAT) { "이 앱보다 새로운 형식의 백업 파일이에요. 앱을 먼저 업데이트해 주세요" }
 
         val todos = root.list("todos") {
             Todo(
-                id = it.getLong("id"),
-                title = it.getString("title"),
-                done = it.optBoolean("done", false),
-                dueEpochDay = it.longOrNull("dueEpochDay"),
-                createdAt = it.optLong("createdAt", System.currentTimeMillis()),
-                priority = it.optInt("priority", 1),
-                category = it.optString("category", ""),
-                memo = it.optString("memo", ""),
-                dueMinute = it.intOrNull("dueMinute"),
-                remind = it.optBoolean("remind", false),
-                completedAt = it.longOrNull("completedAt"),
+                id = it.getLong("id"), title = it.getString("title"), done = it.getBoolean("done"),
+                dueEpochDay = it.longOrNull("dueEpochDay"), createdAt = it.getLong("createdAt"),
+                priority = it.getInt("priority"), category = it.getString("category"), memo = it.getString("memo"),
+                dueMinute = it.intOrNull("dueMinute"), remind = it.getBoolean("remind"), completedAt = it.longOrNull("completedAt"),
             )
         }
-
         val routines = root.list("routines") {
             Routine(
-                id = it.getLong("id"),
-                title = it.getString("title"),
-                emoji = it.optString("emoji", "✨"),
-                color = it.optInt("color", 0),
-                days = it.optInt("days", Routine.ALL_DAYS),
-                reminderEnabled = it.optBoolean("reminderEnabled", false),
-                reminderMinute = it.optInt("reminderMinute", 8 * 60),
-                createdEpochDay = it.optLong("createdEpochDay", java.time.LocalDate.now().toEpochDay()),
-                archived = it.optBoolean("archived", false),
-                sortOrder = it.optInt("sortOrder", 0),
-                kind = it.optInt("kind", 0),
+                id = it.getLong("id"), title = it.getString("title"), emoji = it.getString("emoji"), color = it.getInt("color"),
+                days = it.getInt("days"), reminderEnabled = it.getBoolean("reminderEnabled"),
+                reminderMinute = it.getInt("reminderMinute"), createdEpochDay = it.getLong("createdEpochDay"),
+                archived = it.getBoolean("archived"), sortOrder = it.getInt("sortOrder"), kind = it.optInt("kind", 0),
             )
         }
-
         val checks = root.list("routineChecks") {
-            RoutineCheck(
-                routineId = it.getLong("routineId"),
-                epochDay = it.getLong("epochDay"),
-                checkedAt = it.optLong("checkedAt", System.currentTimeMillis()),
-            )
+            RoutineCheck(it.getLong("routineId"), it.getLong("epochDay"), it.getLong("checkedAt"))
         }
-
         val restaurants = root.list("restaurants") {
             Restaurant(
-                id = it.getLong("id"),
-                name = it.getString("name"),
-                category = it.optString("category", ""),
-                menu = it.optString("menu", ""),
-                address = it.optString("address", ""),
-                link = it.optString("link", ""),
-                rating = it.optInt("rating", 0),
-                comment = it.optString("comment", ""),
-                memo = it.optString("memo", ""),
-                tags = it.optString("tags", ""),
-                price = it.optInt("price", 0),
-                wish = it.optBoolean("wish", false),
-                revisit = it.optBoolean("revisit", false),
-                visitCount = it.optInt("visitCount", 0),
-                lastVisitEpochDay = it.longOrNull("lastVisitEpochDay"),
-                createdAt = it.optLong("createdAt", System.currentTimeMillis()),
+                id = it.getLong("id"), name = it.getString("name"), category = it.getString("category"), menu = it.getString("menu"),
+                address = it.getString("address"), link = it.getString("link"), rating = it.getInt("rating"),
+                comment = it.getString("comment"), memo = it.getString("memo"), tags = it.getString("tags"),
+                price = it.getInt("price"), wish = it.getBoolean("wish"), revisit = it.getBoolean("revisit"),
+                visitCount = it.getInt("visitCount"), lastVisitEpochDay = it.longOrNull("lastVisitEpochDay"),
+                createdAt = it.getLong("createdAt"),
             )
         }
-
-        val visits = root.list("restaurantVisits") {
-            RestaurantVisit(
-                id = it.optLong("id", 0),
-                restaurantId = it.getLong("restaurantId"),
-                epochDay = it.getLong("epochDay"),
-                note = it.optString("note", ""),
-                photo = it.optString("photo", ""),
-            )
-        }
-
-        val diary = root.list("diaryEntries") {
-            DiaryEntry(
-                epochDay = it.getLong("epochDay"),
-                text = it.getString("text"),
-                mood = it.optInt("mood", 0),
-                updatedAt = it.optLong("updatedAt", System.currentTimeMillis()),
-            )
-        }
-
-        val shopping = root.list("shoppingItems") {
-            ShoppingItem(
-                id = it.getLong("id"),
-                name = it.getString("name"),
-                qty = it.optString("qty", ""),
-                category = it.optString("category", "기타"),
-                checked = it.optBoolean("checked", false),
-                createdAt = it.optLong("createdAt", System.currentTimeMillis()),
-                checkedAt = it.longOrNull("checkedAt"),
-            )
-        }
-
-        val books = root.list("books") {
-            Book(
-                id = it.getLong("id"),
-                title = it.getString("title"),
-                author = it.optString("author", ""),
-                totalPages = it.optInt("totalPages", 0),
-                currentPage = it.optInt("currentPage", 0),
-                status = it.optInt("status", 1),
-                rating = it.optInt("rating", 0),
-                startEpochDay = it.longOrNull("startEpochDay"),
-                endEpochDay = it.longOrNull("endEpochDay"),
-                review = it.optString("review", ""),
-                createdAt = it.optLong("createdAt", System.currentTimeMillis()),
-            )
-        }
-
-        val notes = root.list("bookNotes") {
-            BookNote(
-                id = it.getLong("id"),
-                bookId = it.getLong("bookId"),
-                text = it.getString("text"),
-                page = it.optInt("page", 0),
-                createdAt = it.optLong("createdAt", System.currentTimeMillis()),
-            )
-        }
-
-        // DB 갱신
-        db.todoDao.clear()
-        db.todoDao.insertAll(todos)
-
-        db.routineDao.clearAllChecks()
-        db.routineDao.clearRoutines()
-        db.routineDao.insertRoutines(routines)
-        db.routineDao.insertChecks(checks)
-
-        db.restaurantDao.clear()
-        db.restaurantDao.insertAll(restaurants)
-
-        db.visitDao.clear()
-        db.visitDao.insertAll(visits)
-
-        db.diaryDao.clear()
-        db.diaryDao.insertAll(diary)
-
-        db.shoppingDao.clear()
-        db.shoppingDao.insertAll(shopping)
-
-        db.bookDao.clearNotes()
-        db.bookDao.clearBooks()
-        db.bookDao.insertBooks(books)
-        db.bookDao.insertNotes(notes)
-
-        // 설정 복원
-        root.optJSONObject("settings")?.let { s ->
-            val settings = AppSettings.default
-            if (s.has("dailyEnabled")) settings.dailyEnabled = s.getBoolean("dailyEnabled")
-            if (s.has("dailyMinute")) settings.dailyMinute = s.getInt("dailyMinute")
-            if (s.has("readingGoalYear") && s.has("readingGoal")) {
-                settings.setReadingGoal(s.getInt("readingGoalYear"), s.getInt("readingGoal"))
+        val visits: List<RestaurantVisit> = if (root.has("restaurantVisits")) {
+            root.list("restaurantVisits") {
+                RestaurantVisit(it.getLong("id"), it.getLong("restaurantId"), it.getLong("epochDay"), it.optString("note"), it.optString("photo"))
+            }
+        } else {
+            // 방문 기록이 없던 예전 백업: 마지막 방문일을 방문 기록 하나로 만든다
+            restaurants.filter { it.lastVisitEpochDay != null }.mapIndexed { i, r ->
+                RestaurantVisit(id = i + 1L, restaurantId = r.id, epochDay = r.lastVisitEpochDay!!)
             }
         }
+        val diary = root.list("diary") {
+            DiaryEntry(it.getLong("epochDay"), it.getString("text"), it.getInt("mood"), it.getLong("updatedAt"))
+        }
+        val shopping = root.list("shopping") {
+            ShoppingItem(
+                id = it.getLong("id"), name = it.getString("name"), qty = it.getString("qty"), category = it.getString("category"),
+                checked = it.getBoolean("checked"), createdAt = it.getLong("createdAt"), checkedAt = it.longOrNull("checkedAt"),
+            )
+        }
+        val books = root.list("books") {
+            Book(
+                id = it.getLong("id"), title = it.getString("title"), author = it.getString("author"),
+                totalPages = it.getInt("totalPages"), currentPage = it.getInt("currentPage"), status = it.getInt("status"),
+                rating = it.getInt("rating"), startEpochDay = it.longOrNull("startEpochDay"),
+                endEpochDay = it.longOrNull("endEpochDay"), review = it.getString("review"), createdAt = it.getLong("createdAt"),
+            )
+        }
+        val notes = root.list("bookNotes") {
+            BookNote(it.getLong("id"), it.getLong("bookId"), it.getString("text"), it.getInt("page"), it.getLong("createdAt"))
+        }
+
+        val db = AppDatabase.get()
+        run {
+            db.todoDao.clear(); db.todoDao.insertAll(todos)
+            db.routineDao.clearRoutines(); db.routineDao.clearAllChecks()
+            db.routineDao.insertRoutines(routines); db.routineDao.insertChecks(checks)
+            db.restaurantDao.clear(); db.restaurantDao.insertAll(restaurants)
+            db.visitDao.clear(); db.visitDao.insertAll(visits)
+            db.diaryDao.clear(); db.diaryDao.insertAll(diary)
+            db.shoppingDao.clear(); db.shoppingDao.insertAll(shopping)
+            db.bookDao.clearBooks(); db.bookDao.clearNotes()
+            db.bookDao.insertBooks(books); db.bookDao.insertNotes(notes)
+        }
+
+        root.optJSONObject("settings")?.let {
+            val settings = AppSettings.default
+            if (it.has("dailyEnabled")) settings.dailyEnabled = it.getBoolean("dailyEnabled")
+            if (it.has("dailyMinute")) settings.dailyMinute = it.getInt("dailyMinute")
+            if (it.has("readingGoalYear") && it.has("readingGoal")) settings.setReadingGoal(it.getInt("readingGoalYear"), it.getInt("readingGoal"))
+        }
+
+        return Summary(
+            listOf(
+                "할 일" to todos.size, "루틴" to routines.size, "맛집" to restaurants.size, "일기" to diary.size,
+                "장보기" to shopping.size, "책" to books.size, "밑줄" to notes.size,
+            )
+        )
     }
 }

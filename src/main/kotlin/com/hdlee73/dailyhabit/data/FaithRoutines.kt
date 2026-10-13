@@ -1,5 +1,6 @@
 package com.hdlee73.dailyhabit.data
 
+import com.hdlee73.dailyhabit.BuildConfig
 import java.time.LocalDate
 
 /** 천주교인용: '오늘의 말씀 읽기'와 '기도하기' 루틴. 해당 화면을 보면 오늘 체크가 자동으로 된다 */
@@ -9,8 +10,8 @@ object FaithRoutines {
 
     /** 처음 한 번만 만든다. 이후 지우거나 고쳐도 다시 만들지 않는다 */
     suspend fun seed() {
+        if (!BuildConfig.CATHOLIC) return
         val settings = AppSettings.default
-        if (!settings.isCatholic) return
         if (settings.faithRoutinesSeeded) return
         val dao = AppDatabase.get().routineDao
         val existing = dao.allRoutines()
@@ -27,8 +28,7 @@ object FaithRoutines {
 
     /** 말씀 화면을 열었거나 기도문을 열었을 때 호출. 오늘 이미 체크됐거나 오늘 쉬는 루틴이면 그대로 둔다 */
     suspend fun markDone(kind: Int) {
-        val settings = AppSettings.default
-        if (!settings.isCatholic) return
+        if (!BuildConfig.CATHOLIC) return
         val dao = AppDatabase.get().routineDao
         val routine = dao.active().firstOrNull { it.kind == kind } ?: return
         val today = LocalDate.now()
