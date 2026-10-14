@@ -77,16 +77,16 @@ jobs:
       - name: Test (일반용 · 천주교인용)
         run: |
           java -XshowSettings:properties -version 2>&1 | grep -E 'os.arch|java.vendor ='
-          SCREENS=()
+          # 화면 그리기까지 해서 ARM64에서도 skiko(그래픽) 네이티브 라이브러리가 실제로 로드되는지 확인
           for ed in general catholic; do
-            [[ "${{ matrix.arch }}" == x64 ]] && SCREENS=("-Pscreens=$PWD/screens/$ed")
-            ./gradlew.bat --no-daemon test -Pedition=$ed "${SCREENS[@]}" --console=plain
+            ./gradlew.bat --no-daemon test -Pedition=$ed "-Pscreens=$PWD/screens/$ed" --console=plain
           done
+          ls screens/*/ | head -40
 
       - uses: actions/upload-artifact@v4
-        if: always() && matrix.arch == 'x64'
+        if: always()
         with:
-          name: screens-${{ env.VERSION_NAME }}
+          name: screens-${{ env.VERSION_NAME }}-${{ matrix.arch }}
           path: screens/
 
       - name: Build installers (일반용 + 천주교인용, .msi + .exe)
