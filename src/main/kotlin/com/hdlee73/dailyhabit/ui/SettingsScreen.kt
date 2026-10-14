@@ -150,6 +150,8 @@ fun SettingsScreen(onNavigate: (Section) -> Unit = {}, modifier: Modifier = Modi
             ) { Text("지금 미리 받아보기") }
         }
 
+        SyncCard()
+
         SoftCard {
             SectionLabel("구글 캘린더 연결")
             if (calendars.isEmpty()) {

@@ -1,6 +1,9 @@
 package com.hdlee73.dailyhabit.data
 
 import com.hdlee73.dailyhabit.BuildConfig
+import com.hdlee73.dailyhabit.sync.SyncSchema
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -74,6 +77,8 @@ object Backup {
             JSONObject().put("id", it.id).put("bookId", it.bookId).put("text", it.text).put("page", it.page)
                 .put("createdAt", it.createdAt)
         })
+        // 동기화용 고유 번호: 다른 기기에서 되돌린 뒤 동기화해도 같은 기록이 둘로 늘지 않게 한다
+        root.put("syncUids", JSONObject(withContext(Dispatchers.IO) { db.withSyncDb { SyncSchema.exportUids(it) } }))
         settings.lastBackup = System.currentTimeMillis()
         return root.toString(2)
     }
@@ -156,6 +161,11 @@ object Backup {
             db.bookDao.clearBooks(); db.bookDao.clearNotes()
             db.bookDao.insertBooks(books); db.bookDao.insertNotes(notes)
         }
+        // 되돌린 기록에 백업 파일의 고유 번호를 붙이고, 다음 동기화 때 휴대폰에도 반영되게 표시한다
+        val uids = root.optJSONObject("syncUids")?.let { o ->
+            o.keys().asSequence().associateWith { k -> o.optJSONObject(k)?.let { m -> m.keys().asSequence().associateWith { m.getString(it) } }.orEmpty() }
+        }.orEmpty()
+        withContext(Dispatchers.IO) { db.withSyncDb { SyncSchema.afterRestore(it, uids) } }
 
         root.optJSONObject("settings")?.let {
             val settings = AppSettings.default

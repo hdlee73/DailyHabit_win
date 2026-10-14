@@ -5,6 +5,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import com.hdlee73.dailyhabit.sync.JdbcSyncDb
+import com.hdlee73.dailyhabit.sync.SyncDb
+import com.hdlee73.dailyhabit.sync.SyncSchema
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
@@ -384,11 +387,22 @@ class AppDatabase private constructor(private val dbFile: File) {
                     );
                 """)
             }
+            // 휴대폰과 동기화하기 위한 변경 기록 표와 트리거 (기존 기록은 그대로 두고 uid만 붙인다)
+            SyncSchema.ensure(JdbcSyncDb(conn))
         }
     }
 
     private fun notifyChanged() {
         changeTrigger.tryEmit(Unit)
+    }
+
+    /** 동기화처럼 DAO 밖에서 기록을 바꿀 때: 연결 하나로 [block]을 하고 화면을 새로 고친다 */
+    fun <T> withSyncDb(block: (SyncDb) -> T): T = connect().use { conn ->
+        try {
+            block(JdbcSyncDb(conn))
+        } finally {
+            notifyChanged()
+        }
     }
 
     // ── Todo DAO

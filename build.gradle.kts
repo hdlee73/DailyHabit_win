@@ -50,6 +50,11 @@ dependencies {
     // JSON handling
     implementation("org.json:json:20240303")
 
+    // 휴대폰과 같은 와이파이 동기화: PC 찾기(mDNS)와 짝 맺기 QR 코드
+    implementation("org.jmdns:jmdns:3.5.9")
+    implementation("org.slf4j:slf4j-nop:2.0.16")
+    implementation("com.google.zxing:core:3.5.3")
+
     // Testing
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
@@ -111,7 +116,7 @@ compose.desktop {
             description = if (catholic) "DailyHabit Catholic" else "DailyHabit"
             vendor = "hdlee73"
             copyright = "(c) 2026 Lee Hyeondeok (hdlee73@gmail.com)"
-            modules("java.sql", "java.naming", "jdk.crypto.ec", "jdk.unsupported")
+            modules("java.sql", "java.naming", "jdk.crypto.ec", "jdk.unsupported", "jdk.httpserver")
 
             windows {
                 iconFile.set(project.file("icons/dailyhabit.ico"))
