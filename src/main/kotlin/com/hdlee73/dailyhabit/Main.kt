@@ -51,6 +51,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.hdlee73.dailyhabit.data.AppDatabase
 import com.hdlee73.dailyhabit.data.AppSettings
 import com.hdlee73.dailyhabit.data.FaithRoutines
+import com.hdlee73.dailyhabit.data.PcSync
 import com.hdlee73.dailyhabit.data.Updater
 import com.hdlee73.dailyhabit.notify.Notifier
 import com.hdlee73.dailyhabit.notify.Scheduler
@@ -72,7 +73,9 @@ import com.hdlee73.dailyhabit.ui.ShoppingScreen
 import com.hdlee73.dailyhabit.ui.TodayScreen
 import com.hdlee73.dailyhabit.ui.TodoScreen
 import com.hdlee73.dailyhabit.ui.icon
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 fun main(args: Array<String>) {
@@ -91,6 +94,8 @@ fun main(args: Array<String>) {
             SingleInstance.onShowRequest = { visible = true }
             FaithRoutines.seed()
             Scheduler.start()
+            // 휴대폰과 짝을 맺어 두었으면 동기화 서버를 연다
+            withContext(Dispatchers.IO) { PcSync.startIfEnabled() }
         }
 
         Tray(

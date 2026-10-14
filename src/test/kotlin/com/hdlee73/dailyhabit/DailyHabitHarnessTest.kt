@@ -180,4 +180,17 @@ class DailyHabitHarnessTest {
         assertEquals(listOf(LocalDate.of(2026, 10, 19)), workouts.map { it.start.toLocalDate() })
         assertEquals("내 캘린더", events.first().calendarName)
     }
+
+    @Test
+    fun testUpdaterPicksInstallerForCpu() {
+        val assets = org.json.JSONArray(
+            listOf("DailyHabit-1.8.0.exe", "DailyHabit-1.8.0-arm64.msi", "DailyHabit-1.8.0.msi", "DailyHabit-1.8.0-arm64.exe")
+                .map { org.json.JSONObject().put("name", it) }
+        )
+        assertEquals("DailyHabit-1.8.0.msi", Updater.pickInstaller(assets, arm64 = false)?.getString("name"))
+        assertEquals("DailyHabit-1.8.0-arm64.msi", Updater.pickInstaller(assets, arm64 = true)?.getString("name"))
+        // ARM64용이 없는 예전 릴리스는 x64용으로
+        val old = org.json.JSONArray(listOf(org.json.JSONObject().put("name", "DailyHabit-1.7.0.msi")))
+        assertEquals("DailyHabit-1.7.0.msi", Updater.pickInstaller(old, arm64 = true)?.getString("name"))
+    }
 }
