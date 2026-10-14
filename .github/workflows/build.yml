@@ -1,19 +1,66 @@
 name: Build & Release Windows
 
-# main에 VERSION 파일의 새 버전이 올라오면 일반용·천주교인용 설치 파일(.msi)을 만들어 릴리스한다.
+# main에 VERSION 파일의 새 버전이 올라오면 일반용·천주교인용 설치 파일을 만들어 릴리스한다.
 # (안드로이드 저장소와 같은 방식: 태그 v<버전> = 일반용, v<버전>-catholic = 천주교인용)
+# 판본마다 x64(일반 PC)·ARM64(Snapdragon 등) × .msi·.exe 네 파일을 올린다.
+# 이미 있는 릴리스에 빠진 파일을 채우려면 Actions에서 backfill을 켜고 수동 실행한다.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: "이미 있는 현재 버전 릴리스에 exe·ARM64 파일 추가"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          BASE="$(tr -d '[:space:]' < VERSION)"
+          EXISTS=false
+          gh release view "v${BASE}" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && EXISTS=true
+          RELEASE=none
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            if [[ "$EXISTS" == false ]]; then RELEASE=new
+            elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${{ inputs.backfill }}" == "true" ]]; then RELEASE=backfill
+            fi
+          fi
+          if [[ "$RELEASE" == none ]]; then NAME="${BASE}-dev.${GITHUB_RUN_NUMBER}"; else NAME="${BASE}"; fi
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "release=${RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "version ${NAME}, release ${RELEASE}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   build:
-    runs-on: windows-latest
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-latest
+            java: temurin
+            suffix: ""
+          - arch: arm64
+            os: windows-11-arm
+            java: microsoft
+            suffix: "-arm64"
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION_NAME: ${{ needs.version.outputs.name }}
     defaults:
       run:
         shell: bash
@@ -22,100 +69,108 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: ${{ matrix.java }}
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Set version
+      - name: Test (일반용 · 천주교인용)
         run: |
-          BASE="$(tr -d '[:space:]' < VERSION)"
-          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF" == "refs/heads/main" ]] \
-             && ! gh release view "v${BASE}" >/dev/null 2>&1; then
-            echo "VERSION_NAME=${BASE}" >> "$GITHUB_ENV"
-            echo "RELEASE=true" >> "$GITHUB_ENV"
-          else
-            echo "VERSION_NAME=${BASE}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Test (일반용 · 천주교인용) + 화면 미리보기
-        run: |
-          ./gradlew.bat --no-daemon test -Pedition=general "-Pscreens=$PWD/screens/general" --console=plain
-          ./gradlew.bat --no-daemon test -Pedition=catholic "-Pscreens=$PWD/screens/catholic" --console=plain
+          java -XshowSettings:properties -version 2>&1 | grep -E 'os.arch|java.vendor ='
+          SCREENS=()
+          for ed in general catholic; do
+            [[ "${{ matrix.arch }}" == x64 ]] && SCREENS=("-Pscreens=$PWD/screens/$ed")
+            ./gradlew.bat --no-daemon test -Pedition=$ed "${SCREENS[@]}" --console=plain
+          done
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.arch == 'x64'
         with:
           name: screens-${{ env.VERSION_NAME }}
           path: screens/
 
-      - name: Build installers (일반용 + 천주교인용)
+      - name: Build installers (일반용 + 천주교인용, .msi + .exe)
         run: |
           mkdir -p dist
-          ./gradlew.bat --no-daemon packageMsi -Pedition=general --console=plain
-          cp build/compose/binaries/main/msi/DailyHabit-*.msi "dist/DailyHabit-${VERSION_NAME}.msi"
-          ./gradlew.bat --no-daemon packageMsi -Pedition=catholic --console=plain
-          cp build/compose/binaries/main/msi/DailyHabit-Catholic-*.msi "dist/DailyHabit-Catholic-${VERSION_NAME}.msi"
+          for ed in general catholic; do
+            [[ $ed == catholic ]] && NAME=DailyHabit-Catholic || NAME=DailyHabit
+            rm -rf build/compose/binaries
+            ./gradlew.bat --no-daemon packageMsi packageExe -Pedition=$ed --console=plain
+            cp build/compose/binaries/main/msi/${NAME}-*.msi "dist/${NAME}-${VERSION_NAME}${{ matrix.suffix }}.msi"
+            cp build/compose/binaries/main/exe/${NAME}-*.exe "dist/${NAME}-${VERSION_NAME}${{ matrix.suffix }}.exe"
+          done
           ls -la dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DailyHabit-${{ env.VERSION_NAME }}
-          path: dist/*.msi
+          name: DailyHabit-${{ env.VERSION_NAME }}-${{ matrix.arch }}
+          path: dist/*
 
-      - name: Release 일반용
-        if: env.RELEASE == 'true'
+  release:
+    needs: [version, build]
+    if: needs.version.outputs.release != 'none'
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: DailyHabit-${{ needs.version.outputs.name }}-*
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes
+        run: |
+          ls -la dist
+          for ed in general catholic; do sed "s/@VERSION@/${V}/g" .github/release-notes/$ed.md > notes-$ed.md; done
+
+      # 예전 버전(v1.7.0)의 자동 업데이트는 릴리스의 첫 번째 .msi를 받으므로 x64 .msi를 먼저 따로 올린다
+      - name: Release 일반용 (x64 msi)
+        if: needs.version.outputs.release == 'new'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION_NAME }}
+          tag_name: v${{ env.V }}
           target_commitish: ${{ github.sha }}
-          name: DailyHabit for Windows v${{ env.VERSION_NAME }}
-          files: dist/DailyHabit-${{ env.VERSION_NAME }}.msi
+          name: DailyHabit for Windows v${{ env.V }}
+          body_path: notes-general.md
+          files: dist/DailyHabit-${{ env.V }}.msi
           make_latest: "true"
-          body: |
-            ## DailyHabit for Windows v${{ env.VERSION_NAME }} (일반용)
-            안드로이드 DailyHabit v${{ env.VERSION_NAME }}과 같은 기능·디자인·아이콘입니다.
-            - 오늘의 명언 (한국어 · 영어)
-            - 앞으로 7일 구글 캘린더 일정 (설정에서 캘린더의 비공개 iCal 주소 연결)
-            - 할 일 · 매일 루틴(알림 · 체크 · 통계) · 맛집 리스트
-            - 한 줄 일기 · 독서 기록(밑줄·메모) · 독서 목표
-            - 맛집 방문 기록(날짜 수정·사진) · 방문 달력 · 동네별 지도 보기
-            - 월간 돌아보기 · 감사 일기 모음
-            - 일기·맛집 엑셀 저장, 백업 파일 저장·복원 (휴대폰 앱 백업과 호환)
-            - 원하는 시각의 아침 알림 (윈도우 알림 · 오늘 일정 · 루틴)
-            - 앱 정보에서 업데이트 확인 · 내려받아 바로 설치, 새 버전 알림
-            - 창을 닫아도 트레이에서 알림, Windows 시작 시 자동 실행
 
-            **설치:** `DailyHabit-${{ env.VERSION_NAME }}.msi`를 내려받아 실행하세요. 새 버전은 기존 설치본 위에 덮어 설치되고 기록은 그대로 남습니다.
-            천주교 기능(오늘의 복음 · 기도)이 필요하면 **DailyHabit 천주교인용** 릴리스를 받으세요.
-            처음 실행할 때 ‘Windows의 PC 보호’ 창이 뜨면 ‘추가 정보 → 실행’을 누르세요.
-
-      - name: Release 천주교인용
-        if: env.RELEASE == 'true'
+      - name: Release 일반용 (exe · ARM64)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION_NAME }}-catholic
-          target_commitish: ${{ github.sha }}
-          name: DailyHabit 천주교인용 for Windows v${{ env.VERSION_NAME }}
-          files: dist/DailyHabit-Catholic-${{ env.VERSION_NAME }}.msi
-          make_latest: "false"
-          body: |
-            ## DailyHabit 천주교인용 for Windows v${{ env.VERSION_NAME }}
-            안드로이드 DailyHabit 천주교인용 v${{ env.VERSION_NAME }}과 같은 기능·디자인·아이콘입니다.
-            - 오늘의 복음 (매일미사) · 주요 기도문 (가톨릭 기도서) · 오늘의 묵주기도 신비
-            - 앞으로 7일 구글 캘린더 일정 (설정에서 캘린더의 비공개 iCal 주소 연결)
-            - 할 일 · 매일 루틴(알림 · 체크 · 통계) · 맛집 리스트
-            - 오늘의 말씀 읽기·기도하기 루틴 자동 체크
-            - 한 줄 일기 · 독서 기록(밑줄·메모) · 독서 목표
-            - 맛집 방문 기록(날짜 수정·사진) · 방문 달력 · 동네별 지도 보기
-            - 월간 돌아보기 · 감사 일기 모음
-            - 일기·맛집 엑셀 저장, 백업 파일 저장·복원 (휴대폰 앱 백업과 호환)
-            - 원하는 시각의 아침 알림 (윈도우 알림 · 복음 요약 · 오늘 일정)
-            - 앱 정보에서 업데이트 확인 · 내려받아 바로 설치, 새 버전 알림
-            - 창을 닫아도 트레이에서 알림, Windows 시작 시 자동 실행
+          tag_name: v${{ env.V }}
+          name: DailyHabit for Windows v${{ env.V }}
+          body_path: notes-general.md
+          files: |
+            dist/DailyHabit-${{ env.V }}.exe
+            dist/DailyHabit-${{ env.V }}-arm64.msi
+            dist/DailyHabit-${{ env.V }}-arm64.exe
+          make_latest: "true"
+          fail_on_unmatched_files: true
 
-            **설치:** `DailyHabit-Catholic-${{ env.VERSION_NAME }}.msi`를 내려받아 실행하세요.
-            v1.0.0을 쓰고 있었다면 이 버전이 그 위에 덮어 설치되고 기록이 그대로 이어집니다.
-            처음 실행할 때 ‘Windows의 PC 보호’ 창이 뜨면 ‘추가 정보 → 실행’을 누르세요.
+      - name: Release 천주교인용 (x64 msi)
+        if: needs.version.outputs.release == 'new'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.V }}-catholic
+          target_commitish: ${{ github.sha }}
+          name: DailyHabit 천주교인용 for Windows v${{ env.V }}
+          body_path: notes-catholic.md
+          files: dist/DailyHabit-Catholic-${{ env.V }}.msi
+          make_latest: "false"
+
+      - name: Release 천주교인용 (exe · ARM64)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.V }}-catholic
+          name: DailyHabit 천주교인용 for Windows v${{ env.V }}
+          body_path: notes-catholic.md
+          files: |
+            dist/DailyHabit-Catholic-${{ env.V }}.exe
+            dist/DailyHabit-Catholic-${{ env.V }}-arm64.msi
+            dist/DailyHabit-Catholic-${{ env.V }}-arm64.exe
+          make_latest: "false"
+          fail_on_unmatched_files: true

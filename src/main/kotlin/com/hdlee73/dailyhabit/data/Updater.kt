@@ -71,11 +71,7 @@ object Updater {
                 if (tag.endsWith("-catholic") != BuildConfig.CATHOLIC) continue
                 val version = tag.removePrefix("v").removeSuffix("-catholic")
                 val assets = r.optJSONArray("assets") ?: continue
-                var msi: JSONObject? = null
-                for (j in 0 until assets.length()) {
-                    val a = assets.getJSONObject(j)
-                    if (a.optString("name").endsWith(".msi")) { msi = a; break }
-                }
+                val msi = pickInstaller(assets)
                 if (msi == null) continue
                 if (best == null || isNewer(version, best.version)) {
                     best = UpdateInfo(
@@ -134,6 +130,16 @@ object Updater {
      * 설치 파일을 실행한다. 설치하는 동안 파일을 바꿀 수 있도록 앱은 바로 종료되고,
      * 설치가 끝나면 앱을 다시 연다. 실행하지 못하면 false.
      */
+    /** 이 PC의 CPU(x64 / ARM64)에 맞는 설치 파일(.msi)을 고른다. ARM64용이 없으면 x64용(에뮬레이션으로 실행됨) */
+    internal fun pickInstaller(assets: org.json.JSONArray, arm64: Boolean = isArm64()): JSONObject? {
+        val msis = (0 until assets.length()).map { assets.getJSONObject(it) }
+            .filter { it.optString("name").endsWith(".msi", ignoreCase = true) }
+        fun JSONObject.isArm() = optString("name").contains("arm64", ignoreCase = true)
+        return (if (arm64) msis.firstOrNull { it.isArm() } else null) ?: msis.firstOrNull { !it.isArm() }
+    }
+
+    fun isArm64(): Boolean = System.getProperty("os.arch").orEmpty().lowercase().let { it == "aarch64" || it == "arm64" }
+
     fun install(msi: File): Boolean = runCatching {
         fun q(v: String) = "'" + v.replace("'", "''") + "'"
         val exe = System.getProperty("jpackage.app-path").orEmpty()

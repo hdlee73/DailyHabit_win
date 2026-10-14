@@ -13,6 +13,11 @@ val appVersion: String = System.getenv("VERSION_NAME") ?: file("VERSION").readTe
 val edition: String = (findProperty("edition") as String?) ?: "general"
 val catholic = edition == "catholic"
 
+/** Windows ARM64 PC(Surface Pro X·Snapdragon 노트북 등)에서 빌드하면 ARM64용 설치 파일이 만들어진다.
+ *  Compose 1.7.3의 currentOs에는 Windows ARM64가 없어서, 공통 모듈 + 같은 skiko 버전의 ARM64 런타임을 직접 넣는다. */
+val windowsArm64 = System.getProperty("os.name").startsWith("Windows") &&
+    System.getProperty("os.arch").lowercase().let { it == "aarch64" || it == "arm64" }
+
 group = "com.hdlee73.dailyhabit"
 version = appVersion
 
@@ -23,7 +28,12 @@ repositories {
 
 dependencies {
     // Compose Desktop
-    implementation(compose.desktop.currentOs)
+    if (windowsArm64) {
+        implementation(compose.desktop.common)
+        implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-arm64:0.8.18")
+    } else {
+        implementation(compose.desktop.currentOs)
+    }
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
 
@@ -93,7 +103,8 @@ compose.desktop {
         jvmArgs += listOf("-Dfile.encoding=UTF-8")
 
         nativeDistributions {
-            targetFormats(TargetFormat.Msi)
+            // .msi (자동 업데이트에 쓰는 설치 파일) + .exe (같은 설치 프로그램의 실행 파일판, 같은 업그레이드 코드)
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             // 판본마다 따로 설치되는 별개의 앱 (안드로이드와 같음)
             packageName = if (catholic) "DailyHabit-Catholic" else "DailyHabit"
             packageVersion = appVersion.substringBefore('-')
