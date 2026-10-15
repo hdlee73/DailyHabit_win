@@ -69,8 +69,8 @@ private sealed interface UpdateUi {
 private fun openUrl(url: String) = Desktop.openUrl(url)
 
 /** 설치 프로그램을 띄우고, 파일을 바꿀 수 있도록 앱을 닫는다 (설치가 끝나면 다시 열림) */
-private fun startInstall(file: File): Boolean {
-    val opened = Updater.install(file)
+private fun startInstall(file: File, version: String): Boolean {
+    val opened = Updater.install(file, version)
     if (opened) {
         Thread {
             Thread.sleep(1500)
@@ -110,7 +110,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         scope.launch {
             runCatching { Updater.download(info) { p -> state = UpdateUi.Downloading(info, p) } }
                 .onSuccess { file ->
-                    val opened = startInstall(file)
+                    val opened = startInstall(file, info.version)
                     state = UpdateUi.Ready(
                         info, file,
                         if (opened) null else "설치 프로그램을 열지 못했어요. 아래 버튼을 다시 누르거나 릴리스 페이지에서 내려받아 주세요.",
@@ -189,7 +189,16 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 12.dp),
                     )
+                    Updater.lastInstallError?.let { err ->
+                        Text(
+                            "$err 다시 해 보고, 그래도 안 되면 아래 ‘설치 파일 직접 받기’로 받아 실행해 주세요.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
                     Button(onClick = { download(s.info) }, modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) { Text("다운로드하고 설치") }
+                    if (Updater.lastInstallError != null) OutlinedButton(onClick = { openUrl(s.info.pageUrl) }, modifier = Modifier.fillMaxWidth()) { Text("설치 파일 직접 받기") }
                     Text(
                         "설치해도 할 일, 일기 같은 기록은 그대로 남아요.",
                         style = MaterialTheme.typography.bodySmall,
@@ -211,7 +220,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     )
                     Button(
                         onClick = {
-                            val opened = startInstall(s.file)
+                            val opened = startInstall(s.file, s.info.version)
                             state = s.copy(hint = if (opened) null else s.hint)
                         },
                         modifier = Modifier.fillMaxWidth().padding(top = 14.dp),

@@ -126,10 +126,6 @@ object Updater {
         }
     }
 
-    /**
-     * 설치 파일을 실행한다. 설치하는 동안 파일을 바꿀 수 있도록 앱은 바로 종료되고,
-     * 설치가 끝나면 앱을 다시 연다. 실행하지 못하면 false.
-     */
     /** 이 PC의 CPU(x64 / ARM64)에 맞는 설치 파일(.msi)을 고른다. ARM64용이 없으면 x64용(에뮬레이션으로 실행됨) */
     internal fun pickInstaller(assets: org.json.JSONArray, arm64: Boolean = isArm64()): JSONObject? {
         val msis = (0 until assets.length()).map { assets.getJSONObject(it) }
@@ -140,11 +136,43 @@ object Updater {
 
     fun isArm64(): Boolean = System.getProperty("os.arch").orEmpty().lowercase().let { it == "aarch64" || it == "arm64" }
 
-    fun install(msi: File): Boolean = runCatching {
+    /** 설치 결과를 남기는 파일. 설치 스크립트가 "<버전>;<msiexec 종료 코드>"를 적는다 */
+    private val resultFile get() = File(System.getProperty("java.io.tmpdir"), "DailyHabit-install-result.txt")
+
+    /**
+     * 지난번 업데이트 설치가 실패했으면 그 이유. 설치가 끝나 이미 새 버전이면 기록을 지우고 null.
+     * (설치에 실패해도 앱은 예전 버전으로 다시 열리므로, 이유를 알려주지 않으면 같은 안내만 반복된다)
+     */
+    val lastInstallError: String? by lazy { readInstallError() }
+
+    private fun readInstallError(): String? = runCatching {
+        val f = resultFile
+        if (!f.exists()) return null
+        val (version, code) = f.readText().trim().split(';').let { it[0] to it.getOrNull(1)?.trim()?.toIntOrNull() }
+        if (!isNewer(version, BuildConfig.VERSION_NAME) || code == null) { f.delete(); return null }
+        installErrorMessage(version, code)
+    }.getOrNull()
+
+    internal fun installErrorMessage(version: String, code: Int): String? = when (code) {
+        0, 3010 -> null
+        1602 -> "v$version 설치가 취소됐어요."
+        1618 -> "다른 프로그램이 설치 중이라 v${version}을 설치하지 못했어요. 잠시 뒤 다시 해 주세요."
+        1633 -> "이 PC에 맞지 않는 설치 파일이라 v${version}을 설치하지 못했어요."
+        else -> "v$version 설치가 끝나지 않았어요 (오류 코드 $code)."
+    }
+
+    /**
+     * 설치 파일을 실행한다. 설치하는 동안 파일을 바꿀 수 있도록 앱은 바로 종료되고,
+     * 설치가 끝나면 앱을 다시 연다. 실행하지 못하면 false.
+     */
+    fun install(msi: File, version: String): Boolean = runCatching {
         fun q(v: String) = "'" + v.replace("'", "''") + "'"
         val exe = System.getProperty("jpackage.app-path").orEmpty()
+        val log = File(msi.parentFile, "install.log").absolutePath
+        val result = resultFile.apply { delete() }.absolutePath
         val script = buildString {
-            append("Start-Process -FilePath 'msiexec.exe' -Wait -ArgumentList ('/i \"' + ${q(msi.absolutePath)} + '\" /passive /norestart')\n")
+            append("\$p = Start-Process -FilePath 'msiexec.exe' -Wait -PassThru -ArgumentList ('/i \"' + ${q(msi.absolutePath)} + '\" /passive /norestart /l*v \"' + ${q(log)} + '\"')\n")
+            append("Set-Content -Path ${q(result)} -Value (${q(version)} + ';' + \$p.ExitCode)\n")
             if (exe.isNotBlank()) append("if (Test-Path ${q(exe)}) { Start-Process -FilePath ${q(exe)} }\n")
         }
         // 따옴표·한글 경로 문제를 피하려고 스크립트를 인코딩해서 넘긴다

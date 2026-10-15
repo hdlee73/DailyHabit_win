@@ -12,6 +12,11 @@
 - 앱 정보에서 업데이트 확인 · 내려받아 바로 설치, 새 버전 알림
 - 창을 닫아도 트레이에서 알림, Windows 시작 시 자동 실행
 
+**v1.8.1 고친 점: 자동 업데이트**
+- v1.7.0에서 ‘업데이트’를 눌러도 설치가 되지 않고 같은 안내가 계속 뜨던 문제를 고쳤습니다. 일반 PC인데 ARM PC용 설치 파일을 받아서 생긴 문제로, 이 버전부터는 v1.7.0의 자동 업데이트도 PC에 맞는 파일을 받습니다.
+- 설치가 실패하면 다음에 앱을 열 때 이유를 알려주고, 설치 파일을 직접 받을 수 있는 버튼을 보여줍니다.
+- ARM PC용 설치 파일 이름이 `…-arm64-@VERSION@.msi`로 바뀌었습니다.
+
 **v1.8.0 새 기능: 휴대폰과 동기화 (같은 와이파이)**
 - 설정 → 휴대폰과 동기화 → ‘휴대폰과 짝 맺기’로 QR 코드를 띄우고, 휴대폰 DailyHabit 천주교인용 v1.8.0 이상의 설정 → PC와 동기화에서 찍으면 짝이 맺어집니다.
 - 이후 같은 와이파이에서 할 일, 루틴과 체크, 일기, 맛집과 방문 기록(사진 포함), 독서, 장보기가 서로 맞춰집니다. 같은 기록을 양쪽에서 고쳤으면 나중에 고친 쪽이 남습니다.
@@ -24,7 +29,7 @@
 | PC 종류 | 설치 파일 |
 |---|---|
 | 일반 Windows PC (Intel · AMD, 대부분) | `DailyHabit-Catholic-@VERSION@.msi` 또는 `DailyHabit-Catholic-@VERSION@.exe` |
-| ARM PC (Snapdragon · Surface Pro X 등) | `DailyHabit-Catholic-@VERSION@-arm64.msi` 또는 `DailyHabit-Catholic-@VERSION@-arm64.exe` |
+| ARM PC (Snapdragon · Surface Pro X 등) | `DailyHabit-Catholic-arm64-@VERSION@.msi` 또는 `DailyHabit-Catholic-arm64-@VERSION@.exe` |
 
 내 PC 종류는 설정 → 시스템 → 정보의 ‘시스템 종류’에서 볼 수 있습니다 (‘ARM 기반 프로세서’면 ARM용).
 앱 정보의 자동 업데이트는 PC 종류에 맞는 파일을 알아서 받습니다.
