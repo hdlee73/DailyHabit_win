@@ -182,7 +182,10 @@ fun MainApp() {
         AlertDialog(
             onDismissRequest = { updatePrompt = false },
             title = { Text("새 버전이 있어요") },
-            text = { Text("v${pendingUpdate.version}이 나왔어요 (지금 v${BuildConfig.VERSION_NAME}).\n설치할 때까지 앱을 열 때마다 알려드려요.") },
+            text = {
+                val failed = Updater.lastInstallError?.let { "\n\n$it 앱 정보에서 다시 설치하거나 설치 파일을 직접 받을 수 있어요." }.orEmpty()
+                Text("v${pendingUpdate.version}이 나왔어요 (지금 v${BuildConfig.VERSION_NAME}).\n설치할 때까지 앱을 열 때마다 알려드려요.$failed")
+            },
             confirmButton = { TextButton(onClick = { updatePrompt = false; MainState.section = Section.ABOUT }) { Text("업데이트") } },
             dismissButton = { TextButton(onClick = { updatePrompt = false }) { Text("나중에") } },
         )

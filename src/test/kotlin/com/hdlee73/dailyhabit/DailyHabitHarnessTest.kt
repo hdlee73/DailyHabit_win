@@ -184,13 +184,40 @@ class DailyHabitHarnessTest {
     @Test
     fun testUpdaterPicksInstallerForCpu() {
         val assets = org.json.JSONArray(
-            listOf("DailyHabit-1.8.0.exe", "DailyHabit-1.8.0-arm64.msi", "DailyHabit-1.8.0.msi", "DailyHabit-1.8.0-arm64.exe")
+            listOf("DailyHabit-1.8.1.exe", "DailyHabit-arm64-1.8.1.msi", "DailyHabit-1.8.1.msi", "DailyHabit-arm64-1.8.1.exe")
                 .map { org.json.JSONObject().put("name", it) }
         )
-        assertEquals("DailyHabit-1.8.0.msi", Updater.pickInstaller(assets, arm64 = false)?.getString("name"))
-        assertEquals("DailyHabit-1.8.0-arm64.msi", Updater.pickInstaller(assets, arm64 = true)?.getString("name"))
+        assertEquals("DailyHabit-1.8.1.msi", Updater.pickInstaller(assets, arm64 = false)?.getString("name"))
+        assertEquals("DailyHabit-arm64-1.8.1.msi", Updater.pickInstaller(assets, arm64 = true)?.getString("name"))
+        // 예전 이름(…-1.8.0-arm64.msi)도 CPU에 맞게 고른다
+        val v180 = org.json.JSONArray(listOf("DailyHabit-1.8.0-arm64.msi", "DailyHabit-1.8.0.msi").map { org.json.JSONObject().put("name", it) })
+        assertEquals("DailyHabit-1.8.0.msi", Updater.pickInstaller(v180, arm64 = false)?.getString("name"))
         // ARM64용이 없는 예전 릴리스는 x64용으로
         val old = org.json.JSONArray(listOf(org.json.JSONObject().put("name", "DailyHabit-1.7.0.msi")))
         assertEquals("DailyHabit-1.7.0.msi", Updater.pickInstaller(old, arm64 = true)?.getString("name"))
+    }
+
+    /** v1.7.0의 자동 업데이트는 GitHub가 이름순으로 돌려주는 자산 중 첫 .msi를 받으므로, 릴리스 파일 이름은 x64 .msi가 먼저 오게 지어야 한다 */
+    @Test
+    fun testReleaseAssetNamesPutX64MsiFirst() {
+        for (name in listOf("DailyHabit", "DailyHabit-Catholic")) {
+            val files = listOf("$name-1.8.1.msi", "$name-1.8.1.exe", "$name-arm64-1.8.1.msi", "$name-arm64-1.8.1.exe")
+            for (sorted in listOf(files.sorted(), files.sortedBy { it.lowercase() })) {
+                assertEquals("$name-1.8.1.msi", sorted.first { it.endsWith(".msi") })
+            }
+        }
+        // 워크플로가 실제로 그 이름을 쓰는지
+        val yml = java.io.File(".github/workflows/build.yml").readText()
+        assertTrue("dist/DailyHabit-arm64-\${{ env.V }}.msi" in yml)
+        assertTrue("dist/DailyHabit-Catholic-arm64-\${{ env.V }}.msi" in yml)
+        assertTrue("-\${{ env.V }}-arm64." !in yml)
+    }
+
+    @Test
+    fun testInstallErrorMessages() {
+        assertEquals(null, Updater.installErrorMessage("1.8.1", 0))
+        assertEquals(null, Updater.installErrorMessage("1.8.1", 3010))
+        assertTrue(Updater.installErrorMessage("1.8.1", 1633)!!.contains("맞지 않는"))
+        assertTrue(Updater.installErrorMessage("1.8.1", 1603)!!.contains("1603"))
     }
 }

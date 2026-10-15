@@ -57,6 +57,7 @@ jobs:
           - arch: arm64
             os: windows-11-arm
             java: microsoft
+            # 이름 순서상 x64 .msi보다 뒤에 오도록 "-arm64-<버전>" (아래 release 주석 참고)
             suffix: "-arm64"
     runs-on: ${{ matrix.os }}
     env:
@@ -96,8 +97,8 @@ jobs:
             [[ $ed == catholic ]] && NAME=DailyHabit-Catholic || NAME=DailyHabit
             rm -rf build/compose/binaries
             ./gradlew.bat --no-daemon packageMsi packageExe -Pedition=$ed --console=plain
-            cp build/compose/binaries/main/msi/${NAME}-*.msi "dist/${NAME}-${VERSION_NAME}${{ matrix.suffix }}.msi"
-            cp build/compose/binaries/main/exe/${NAME}-*.exe "dist/${NAME}-${VERSION_NAME}${{ matrix.suffix }}.exe"
+            cp build/compose/binaries/main/msi/${NAME}-*.msi "dist/${NAME}${{ matrix.suffix }}-${VERSION_NAME}.msi"
+            cp build/compose/binaries/main/exe/${NAME}-*.exe "dist/${NAME}${{ matrix.suffix }}-${VERSION_NAME}.exe"
           done
           ls -la dist
 
@@ -126,7 +127,10 @@ jobs:
           ls -la dist
           for ed in general catholic; do sed "s/@VERSION@/${V}/g" .github/release-notes/$ed.md > notes-$ed.md; done
 
-      # 예전 버전(v1.7.0)의 자동 업데이트는 릴리스의 첫 번째 .msi를 받으므로 x64 .msi를 먼저 따로 올린다
+      # 예전 버전(v1.7.0)의 자동 업데이트는 릴리스 API가 돌려주는 첫 번째 .msi를 받는다.
+      # API는 파일을 올린 순서가 아니라 이름순으로 돌려주므로, ARM64 파일 이름을
+      # DailyHabit-arm64-<버전>.msi로 해서 x64용 DailyHabit-<버전>.msi가 항상 먼저 오게 한다.
+      # (v1.8.0은 DailyHabit-1.8.0-arm64.msi가 먼저 와서 v1.7.0이 x64 PC에 ARM64용을 받아 설치에 실패했다)
       - name: Release 일반용 (x64 msi)
         if: needs.version.outputs.release == 'new'
         uses: softprops/action-gh-release@v2
@@ -146,8 +150,8 @@ jobs:
           body_path: notes-general.md
           files: |
             dist/DailyHabit-${{ env.V }}.exe
-            dist/DailyHabit-${{ env.V }}-arm64.msi
-            dist/DailyHabit-${{ env.V }}-arm64.exe
+            dist/DailyHabit-arm64-${{ env.V }}.msi
+            dist/DailyHabit-arm64-${{ env.V }}.exe
           make_latest: "true"
           fail_on_unmatched_files: true
 
@@ -170,7 +174,7 @@ jobs:
           body_path: notes-catholic.md
           files: |
             dist/DailyHabit-Catholic-${{ env.V }}.exe
-            dist/DailyHabit-Catholic-${{ env.V }}-arm64.msi
-            dist/DailyHabit-Catholic-${{ env.V }}-arm64.exe
+            dist/DailyHabit-Catholic-arm64-${{ env.V }}.msi
+            dist/DailyHabit-Catholic-arm64-${{ env.V }}.exe
           make_latest: "false"
           fail_on_unmatched_files: true

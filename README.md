@@ -30,7 +30,7 @@
 ## 릴리스
 
 `VERSION`을 올려 `main`에 올리면 GitHub Actions가 x64(windows-latest)·ARM64(windows-11-arm)에서 테스트 후 판본마다 네 파일을 만들어 릴리스합니다.
-`DailyHabit-<버전>.msi` / `.exe` (일반 PC), `DailyHabit-<버전>-arm64.msi` / `.exe` (ARM PC). 천주교인용은 `DailyHabit-Catholic-…`.
+`DailyHabit-<버전>.msi` / `.exe` (일반 PC), `DailyHabit-arm64-<버전>.msi` / `.exe` (ARM PC). 천주교인용은 `DailyHabit-Catholic-…`.
 .msi와 .exe는 같은 설치 프로그램(같은 업그레이드 코드)이고, 앱의 자동 업데이트는 PC의 CPU에 맞는 .msi를 받습니다.
 이미 있는 릴리스에 빠진 파일을 채우려면 Actions에서 workflow를 `backfill`로 수동 실행합니다.
 태그: `v<버전>` (일반용), `v<버전>-catholic` (천주교인용). 앱의 업데이트 확인도 이 태그 규칙으로 내 판본을 찾습니다.
