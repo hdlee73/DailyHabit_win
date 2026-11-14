@@ -224,8 +224,10 @@ class DailyHabitHarnessTest {
     @Test
     fun testConfessionGuideAndLocalPersistence() = runTest {
         val total = com.hdlee73.dailyhabit.data.ConfessionGuide.groups.sumOf { it.items.size }
-        assertTrue(total >= 15)
+        assertTrue(com.hdlee73.dailyhabit.data.ConfessionGuide.groups.size >= 10)
+        assertTrue(total >= 45)
         assertEquals(total, com.hdlee73.dailyhabit.data.ConfessionGuide.allItemIds.size)
+        assertTrue(com.hdlee73.dailyhabit.data.ConfessionGuide.groups.any { it.subtitle == "십계명 외" })
 
         val today = LocalDate.of(2026, 11, 14)
         assertEquals("오늘", com.hdlee73.dailyhabit.data.ConfessionGuide.formatElapsed(0L))
