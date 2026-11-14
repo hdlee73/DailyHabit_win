@@ -68,6 +68,21 @@ class AppSettings private constructor() {
         get() = json.optString(KEY_SHOPPING_HISTORY, "").split('\n').filter { it.isNotBlank() }
         set(v) = put(KEY_SHOPPING_HISTORY, v.joinToString("\n"))
 
+    /** 마지막 고해성사 날짜 (epochDay, 미기록이면 null) */
+    var lastConfessionEpochDay: Long?
+        get() = if (json.has(KEY_LAST_CONFESSION) && !json.isNull(KEY_LAST_CONFESSION)) json.getLong(KEY_LAST_CONFESSION) else null
+        set(v) = put(KEY_LAST_CONFESSION, v ?: JSONObject.NULL)
+
+    /** 양심성찰 체크리스트에서 선택한 항목 ID (로컬에만 보관) */
+    var confessionCheckedIds: Set<String>
+        get() = json.optString(KEY_CONFESSION_CHECKED, "").split('\n').filter { it.isNotBlank() }.toSet()
+        set(v) = put(KEY_CONFESSION_CHECKED, v.joinToString("\n"))
+
+    /** 고해성사 준비 메모 (로컬에만 보관) */
+    var confessionMemo: String
+        get() = json.optString(KEY_CONFESSION_MEMO, "")
+        set(v) = put(KEY_CONFESSION_MEMO, v)
+
     // ── 윈도우 전용
 
     /** 창을 닫아도 알림 영역(트레이)에서 계속 실행해 알림을 보낸다 */
@@ -92,6 +107,9 @@ class AppSettings private constructor() {
         private const val KEY_DAILY_SENT = "daily_sent_epoch_day"
         private const val KEY_KEEP_IN_TRAY = "keep_in_tray"
         private const val KEY_CALENDAR_URLS = "calendar_urls"
+        private const val KEY_LAST_CONFESSION = "last_confession_epoch_day"
+        private const val KEY_CONFESSION_CHECKED = "confession_checked_ids"
+        private const val KEY_CONFESSION_MEMO = "confession_memo"
 
         val default: AppSettings by lazy { AppSettings() }
     }

@@ -34,7 +34,8 @@ object Backup {
         root.put(
             "settings",
             JSONObject().put("dailyEnabled", settings.dailyEnabled).put("dailyMinute", settings.dailyMinute)
-                .put("readingGoalYear", year).put("readingGoal", settings.readingGoal(year)),
+                .put("readingGoalYear", year).put("readingGoal", settings.readingGoal(year))
+                .apply { settings.lastConfessionEpochDay?.let { put("lastConfessionEpochDay", it) } },
         )
 
         root.put("todos", db.todoDao.all().toJson {
@@ -172,6 +173,9 @@ object Backup {
             if (it.has("dailyEnabled")) settings.dailyEnabled = it.getBoolean("dailyEnabled")
             if (it.has("dailyMinute")) settings.dailyMinute = it.getInt("dailyMinute")
             if (it.has("readingGoalYear") && it.has("readingGoal")) settings.setReadingGoal(it.getInt("readingGoalYear"), it.getInt("readingGoal"))
+            if (it.has("lastConfessionEpochDay") && !it.isNull("lastConfessionEpochDay")) {
+                settings.lastConfessionEpochDay = it.getLong("lastConfessionEpochDay")
+            }
         }
 
         return Summary(

@@ -220,4 +220,41 @@ class DailyHabitHarnessTest {
         assertTrue(Updater.installErrorMessage("1.8.1", 1633)!!.contains("맞지 않는"))
         assertTrue(Updater.installErrorMessage("1.8.1", 1603)!!.contains("1603"))
     }
+
+    @Test
+    fun testConfessionGuideAndLocalPersistence() = runTest {
+        val total = com.hdlee73.dailyhabit.data.ConfessionGuide.groups.sumOf { it.items.size }
+        assertTrue(total >= 15)
+        assertEquals(total, com.hdlee73.dailyhabit.data.ConfessionGuide.allItemIds.size)
+
+        val today = LocalDate.of(2026, 11, 14)
+        assertEquals("오늘", com.hdlee73.dailyhabit.data.ConfessionGuide.formatElapsed(0L))
+        assertEquals("어제", com.hdlee73.dailyhabit.data.ConfessionGuide.formatElapsed(1L))
+        assertTrue(com.hdlee73.dailyhabit.data.ConfessionGuide.confessionOpening(today.minusDays(21), today).contains("약 3주(21일)"))
+
+        val settings = com.hdlee73.dailyhabit.data.AppSettings.default
+        val prevDay = settings.lastConfessionEpochDay
+        val prevChecked = settings.confessionCheckedIds
+        val prevMemo = settings.confessionMemo
+        try {
+            val recorded = LocalDate.of(2026, 10, 1).toEpochDay()
+            settings.lastConfessionEpochDay = recorded
+            settings.confessionCheckedIds = setOf("g1_1", "g3_2")
+            settings.confessionMemo = "비밀 메모 테스트"
+
+            val json = Backup.export()
+            assertTrue(json.contains("\"lastConfessionEpochDay\": $recorded"))
+            // 양심성찰 체크리스트와 메모는 로컬 전용으로 백업에 포함되지 않아야 한다
+            assertFalse(json.contains("g1_1"))
+            assertFalse(json.contains("비밀 메모 테스트"))
+
+            settings.lastConfessionEpochDay = null
+            Backup.restore(json)
+            assertEquals(recorded, settings.lastConfessionEpochDay)
+        } finally {
+            settings.lastConfessionEpochDay = prevDay
+            settings.confessionCheckedIds = prevChecked
+            settings.confessionMemo = prevMemo
+        }
+    }
 }

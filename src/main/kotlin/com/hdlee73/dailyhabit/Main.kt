@@ -269,6 +269,8 @@ fun MainApp() {
                                     )
                                     Section.ABOUT -> AboutScreen()
                                     Section.REVIEW -> ReviewScreen()
+                                    Section.HYMN -> com.hdlee73.dailyhabit.ui.HymnScreen()
+                                    Section.CONFESSION -> com.hdlee73.dailyhabit.ui.ConfessionScreen()
                                     Section.SETTINGS -> SettingsScreen(onNavigate = ::go)
                                 }
                             }
