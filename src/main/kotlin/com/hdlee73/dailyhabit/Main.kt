@@ -8,9 +8,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
@@ -217,16 +217,28 @@ fun MainApp() {
                     )
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    // 상단: 왼쪽 메뉴 버튼, 가운데 아이콘 + 화면 이름
-                    Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp)) {
-                        IconButton(
-                            onClick = { MainState.drawerOpen = !MainState.drawerOpen },
-                            modifier = Modifier.align(Alignment.CenterStart),
-                        ) { Icon(Icons.Filled.Menu, contentDescription = if (MainState.drawerOpen) "메뉴 접기" else "메뉴 열기") }
-                        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(section.icon(), null, Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(section.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    // 상단 (시안 A): 왼쪽 둥근 메뉴 버튼 + 날짜와 화면 이름
+                    Row(
+                        Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val menuLabel = if (MainState.drawerOpen) "메뉴 접기" else "메뉴 열기"
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                .clickable(onClickLabel = menuLabel) { MainState.drawerOpen = !MainState.drawerOpen },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.Menu, contentDescription = menuLabel, modifier = Modifier.size(22.dp)) }
+                        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                            Text(
+                                "${today.monthValue}월 ${today.dayOfMonth}일 " +
+                                    today.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.KOREAN),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(section.label, style = MaterialTheme.typography.titleLarge, maxLines = 1)
                         }
                     }
                     AnimatedContent(

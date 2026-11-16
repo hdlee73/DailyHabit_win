@@ -135,7 +135,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             )
             Text(
                 "DailyHabit",
-                fontFamily = FontFamily.Serif,
+                fontFamily = FontFamily.Default,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(top = 14.dp),
